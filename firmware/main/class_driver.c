@@ -9,6 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "usb/usb_host.h"
 
 #include "midi_translator.h"
@@ -28,6 +29,9 @@ typedef struct {
     uint8_t dev_addr;
     usb_device_handle_t dev_hdl;
     uint32_t actions;
+    esp_timer_handle_t midi_timer_hdl;
+    uint64_t midi_timer_period;
+    uint64_t new_midi_timer_period;
 } class_driver_t;
 
 
@@ -249,7 +253,7 @@ static void transform_midi_packet(struct uart_midi_event_packet *uart_ev)
 static void in_transfer_cb(usb_transfer_t *in_transfer)
 {
     //This is function is called from within usb_host_client_handle_events(). Don't block and try to keep it short
-    struct class_driver_t *class_driver_obj = (struct class_driver_t *)in_transfer->context;
+    class_driver_t *class_driver_obj = (class_driver_t *)in_transfer->context;
     //printf("IN: Transfer status %d, actual number of bytes transferred %d\n", in_transfer->status, in_transfer->actual_num_bytes);
 
     //printf("IN: %d %d %d %d", in_transfer->data_buffer[0], in_transfer->data_buffer[1], in_transfer->data_buffer[2], in_transfer->data_buffer[3]);
@@ -264,6 +268,13 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
 
     struct uart_midi_event_packet uart_ev = usb_midi_to_uart(usb_ev);
 
+    if (uart_ev.byte1 == 0xB9)
+    {
+        // pulseRateMicroSec = 60 * 1000000 / minBPM * pulseRatePPQN + ((maxBPM - minBPM) * activeMidiCcIntervals * pulseRatePPQN / totalMidiCcIntervals)
+        // minBPM = 70, maxBPM = 180, pulseRatePPQN = 24 (as per MIDI clock spec), total MIDI CC intervals = 128
+        float new_period = ((float)60 * 1000000) / ((float)70 * 24 + ((180 - 70) * (uart_ev.byte3) * 24)/128);
+        class_driver_obj->new_midi_timer_period = (uint64_t)new_period;
+    }
     
     ESP_LOGI(TAG, "USB -> MIDI USB in: 0x%02X 0x%02X 0x%02X 0x%02X", usb_ev.byte0, usb_ev.byte1, usb_ev.byte2, usb_ev.byte3);
     transform_midi_packet(&uart_ev);
@@ -323,7 +334,7 @@ static void action_get_config_desc(class_driver_t *driver_obj)
     in_transfer->device_handle = driver_obj->dev_hdl;
     in_transfer->bEndpointAddress = in_ep->bEndpointAddress;
     in_transfer->callback = in_transfer_cb;
-    in_transfer->context = (void *)&driver_obj;
+    in_transfer->context = (void *)driver_obj;
 
 
     ESP_LOGI(TAG, "SUKU start IN transfer on ep %02x nice", in_ep->bEndpointAddress);
@@ -380,6 +391,53 @@ static void aciton_close_dev(class_driver_t *driver_obj)
 }
 
 
+static void timer_cb(void *arg)
+{
+    class_driver_t *driver_obj = (class_driver_t *)arg;
+    struct uart_midi_event_packet clock =
+    {
+        .length = 1,
+        .byte1 = 0xF8,
+        .byte2 = 0,
+        .byte3 = 0,
+    };
+    uart_send_data(clock);
+
+    if (driver_obj->new_midi_timer_period != driver_obj->midi_timer_period)
+    {
+        ESP_LOGI(TAG, "Period changed from %llu -> %llu", driver_obj->midi_timer_period, driver_obj->new_midi_timer_period);
+        esp_timer_restart(driver_obj->midi_timer_hdl, driver_obj->new_midi_timer_period);
+        driver_obj->midi_timer_period = driver_obj->new_midi_timer_period;
+    }
+}
+
+
+static void setup_timer_for_midi_clock(class_driver_t *driver_obj)
+{
+    esp_timer_create_args_t timer_args = {
+        .callback = timer_cb,
+        .arg = (void *)driver_obj,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "MIDI clock",
+        .skip_unhandled_events = false,
+    };
+    driver_obj->midi_timer_period = 28409;
+    driver_obj->new_midi_timer_period = 28409;
+    esp_timer_create(&timer_args, &driver_obj->midi_timer_hdl);
+}
+
+static void start_midi_clock(class_driver_t *driver_obj)
+{
+    esp_timer_start_periodic(driver_obj->midi_timer_hdl, driver_obj->midi_timer_period);
+    ESP_LOGI(TAG, "MIDI clock started");
+}
+
+static void stop_midi_clock(class_driver_t *driver_obj)
+{
+    esp_timer_stop(driver_obj->midi_timer_hdl);
+    esp_timer_delete(driver_obj->midi_timer_hdl);
+}
+
 
 void class_driver_task(void *arg)
 {
@@ -400,12 +458,11 @@ void class_driver_task(void *arg)
     };
     ESP_ERROR_CHECK(usb_host_client_register(&client_config, &driver_obj.client_hdl));
  
-
+    setup_timer_for_midi_clock(&driver_obj);
 
     while (1) {
 
         //ESP_LOGI(TAG, "actions: %d, loopcounter: %d", driver_obj.actions, loopcounter);
-
         
         usb_host_client_handle_events(driver_obj.client_hdl, 10);
 
@@ -413,7 +470,7 @@ void class_driver_task(void *arg)
 
         if (driver_obj.actions & ACTION_OPEN_DEV) {
             action_open_dev(&driver_obj);
-
+            start_midi_clock(&driver_obj);
         }
         if (driver_obj.actions & ACTION_GET_DEV_INFO) {
             action_get_info(&driver_obj);
@@ -436,6 +493,7 @@ void class_driver_task(void *arg)
         }
     }
 
+    stop_midi_clock(&driver_obj);
 
     ESP_LOGI(TAG, "Deregistering Client");
     ESP_ERROR_CHECK(usb_host_client_deregister(driver_obj.client_hdl));
