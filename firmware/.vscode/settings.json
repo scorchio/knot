@@ -45,19 +45,19 @@
             "name": "OpenOCD",
             "color": "white",
             "singleInstance": true,
-            "command": ". $HOME/$whoami/Documents/esp-idf/export.sh && openocd -c \"set ESP_RTOS none\" -f board/esp32s3-ftdi.cfg ",
+            "command": ". $HOME/$whoami/Documents/Hax/esp/esp-idf/export.sh && openocd -c \"set ESP_RTOS none\" -f board/esp32s3-ftdi.cfg ",
         },
         {
             "name": "Menuconfig",
             "color": "white",
             "singleInstance": true,
-            "command": ". $HOME/$whoami/Documents/esp-idf/export.sh && idf.py menuconfig",
+            "command": ". $HOME/$whoami/Documents/Hax/esp/esp-idf/export.sh && idf.py menuconfig",
         },
         {
             "name": "Flash",
             "color": "white",
             "singleInstance": true,
-            "command": ". $HOME/$whoami/Documents/esp-idf/export.sh && idf.py -p /dev/ttyACM0 flash",
+            "command": ". $HOME/$whoami/Documents/Hax/esp/esp-idf/export.sh && idf.py -p /dev/ttyACM0 flash",
         },        
 	    {
             "name": "Docker Build",
@@ -85,5 +85,7 @@
         }
     ]
 },
-"git.ignoreLimitWarning": true
+"git.ignoreLimitWarning": true,
+"idf.adapterTargetName": "esp32s3",
+"idf.port": "/dev/cu.usbserial-142340"
 }
