@@ -232,6 +232,20 @@ static void transfer_cb(usb_transfer_t *transfer)
 
 static usb_transfer_t *in_transfer;
 
+static void transform_midi_packet(struct uart_midi_event_packet *uart_ev)
+{
+    ESP_LOGI(TAG, "MIDI packet pre-transform: 0x%02X 0x%02X 0x%02X", uart_ev->byte1, uart_ev->byte2, uart_ev->byte3);
+    if ((uart_ev->byte1 & 0xF0) == 0xB0 && uart_ev->byte2 >= 0x15 && uart_ev->byte2 <= 0x1A) // MIDI CC
+    {
+        uint8_t cc_on_channel_zero = uart_ev->byte1 - 9;
+        uint8_t channel_shift = uart_ev->byte2 - 0x15;
+        uart_ev->byte1 = cc_on_channel_zero + channel_shift;
+        uart_ev->byte2 = 0x5F; // Model:Samples track level CC
+    }
+    ESP_LOGI(TAG, "MIDI packet post-transform: 0x%02X 0x%02X 0x%02X", uart_ev->byte1, uart_ev->byte2, uart_ev->byte3);
+}
+
+
 static void in_transfer_cb(usb_transfer_t *in_transfer)
 {
     //This is function is called from within usb_host_client_handle_events(). Don't block and try to keep it short
@@ -251,7 +265,8 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
     struct uart_midi_event_packet uart_ev = usb_midi_to_uart(usb_ev);
 
     
-    ESP_LOGI(TAG, "USB -> MIDI: %d %d %d %d", usb_ev.byte0, usb_ev.byte1, usb_ev.byte2, usb_ev.byte3);
+    ESP_LOGI(TAG, "USB -> MIDI USB in: 0x%02X 0x%02X 0x%02X 0x%02X", usb_ev.byte0, usb_ev.byte1, usb_ev.byte2, usb_ev.byte3);
+    transform_midi_packet(&uart_ev);
     uart_send_data(uart_ev);
 
 
