@@ -1,4 +1,4 @@
-build
+firmware/build
 firmware/output
 firmware/.vscode
 .DS_Store
