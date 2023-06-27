@@ -34,6 +34,7 @@ typedef struct {
     esp_timer_handle_t midi_timer_hdl;
     uint64_t midi_timer_period;
     uint64_t new_midi_timer_period;
+    uint64_t midi_timer_period_pre_bend;
 } class_driver_t;
 
 
@@ -278,6 +279,20 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
         float new_period = ((float)60 * 1000000) / ((float)70 * 24 + ((180 - 70) * (uart_ev.byte3) * 24)/128);
         class_driver_obj->new_midi_timer_period = (uint64_t)new_period;
     }
+    // tempo bend - speed up; store pre-bend tempo
+    if (uart_ev.byte1 == 0xBF && uart_ev.byte2 == 0x68 && uart_ev.byte3 == 0x7F) {
+        class_driver_obj->midi_timer_period_pre_bend = class_driver_obj->midi_timer_period;
+        class_driver_obj->new_midi_timer_period = class_driver_obj->midi_timer_period - class_driver_obj->midi_timer_period / 16;
+    }
+    // tempo bend - slow down; store pre-bend tempo
+    if (uart_ev.byte1 == 0xBF && uart_ev.byte2 == 0x69 && uart_ev.byte3 == 0x7F) {
+        class_driver_obj->new_midi_timer_period = class_driver_obj->midi_timer_period + class_driver_obj->midi_timer_period / 16;
+    }
+    // tempo bend - release; restore pre-bend tempo
+    if (uart_ev.byte1 == 0xBF && (uart_ev.byte2 == 0x68 || uart_ev.byte2 == 0x69) && uart_ev.byte3 == 0x00) {
+        class_driver_obj->new_midi_timer_period = class_driver_obj->midi_timer_period_pre_bend;
+    }
+
     
     ESP_LOGI(TAG, "USB -> MIDI USB in: 0x%02X 0x%02X 0x%02X 0x%02X", usb_ev.byte0, usb_ev.byte1, usb_ev.byte2, usb_ev.byte3);
     transform_midi_packet(&uart_ev);
