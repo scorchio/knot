@@ -24,6 +24,8 @@
 #define ACTION_CLOSE_DEV            0x20
 #define ACTION_EXIT                 0x40
 
+#define DEFAULT_MIDI_CLOCK_TIMER_IN_USEC 20833 // = 120 BPM
+
 typedef struct {
     usb_host_client_handle_t client_hdl;
     uint8_t dev_addr;
@@ -422,8 +424,8 @@ static void setup_timer_for_midi_clock(class_driver_t *driver_obj)
         .name = "MIDI clock",
         .skip_unhandled_events = false,
     };
-    driver_obj->midi_timer_period = 28409;
-    driver_obj->new_midi_timer_period = 28409;
+    driver_obj->midi_timer_period = DEFAULT_MIDI_CLOCK_TIMER_IN_USEC;
+    driver_obj->new_midi_timer_period = DEFAULT_MIDI_CLOCK_TIMER_IN_USEC;
     esp_timer_create(&timer_args, &driver_obj->midi_timer_hdl);
 }
 
