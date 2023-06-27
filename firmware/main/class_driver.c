@@ -268,6 +268,7 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
 
     struct uart_midi_event_packet uart_ev = usb_midi_to_uart(usb_ev);
 
+    // control tempo based on mod wheel value
     if (uart_ev.byte1 == 0xB9)
     {
         // pulseRateMicroSec = 60 * 1000000 / minBPM * pulseRatePPQN + ((maxBPM - minBPM) * activeMidiCcIntervals * pulseRatePPQN / totalMidiCcIntervals)
