@@ -33,9 +33,10 @@ typedef struct {
     uint32_t actions;
     esp_timer_handle_t midi_timer_hdl;
     uint64_t midi_timer_period;
+    uint64_t midi_timer_base_period;
     uint64_t new_midi_timer_period;
     uint64_t midi_timer_period_pre_bend;
-    uint16_t midi_timer_fine;
+    int16_t midi_timer_fine;
 } class_driver_t;
 
 
@@ -263,6 +264,16 @@ static uint64_t get_midi_clock_pulse_rate_usec(uint16_t stepIdx)
 }
 
 
+static uint64_t get_midi_clock_pulse_rate_with_fine(uint64_t base, int16_t fine)
+{
+    // mapping the 14-bit unsigned fine to +/- 8% - the first - is because we need to reverse the values
+    float ratio = 1 - (fine / 8192.0 * 8 / 100); 
+    uint64_t result = (uint64_t)(base * ratio);
+    ESP_LOGI(TAG, "Calculating pulse rate: base = %llu, fine = %i (ratio = %f), result = %llu", base, fine, ratio, result);
+    return result;
+}
+
+
 static void in_transfer_cb(usb_transfer_t *in_transfer)
 {
     //This is function is called from within usb_host_client_handle_events(). Don't block and try to keep it short
@@ -284,15 +295,22 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
     // control tempo based on mod wheel value
     if (uart_ev.byte1 == 0xB9)
     {
-        class_driver_obj->new_midi_timer_period = get_midi_clock_pulse_rate_usec(uart_ev.byte3);
+        class_driver_obj->midi_timer_base_period = get_midi_clock_pulse_rate_usec(uart_ev.byte3);
+        class_driver_obj->new_midi_timer_period = get_midi_clock_pulse_rate_with_fine(
+            class_driver_obj->midi_timer_base_period, 
+            class_driver_obj->midi_timer_fine
+        );
     }
     // fine tempo control based on pitch wheel, ignoring automatically triggered mid point
     // On a mechanically reset pitch wheel, this wouldn't work this simply, but for the
     // Launchkey Mini MK3 which is reset digitally it's fine.
     if (uart_ev.byte1 == 0xE9 && !(uart_ev.byte2 == 0x00 && uart_ev.byte3 == 0x40))
     {
-        class_driver_obj->midi_timer_fine = (uart_ev.byte3 << 7) + uart_ev.byte2;
-        ESP_LOGI(TAG, "Pitch result: %i", class_driver_obj->midi_timer_fine);
+        class_driver_obj->midi_timer_fine = ((uart_ev.byte3 - 0x40) << 7) + uart_ev.byte2;
+        class_driver_obj->new_midi_timer_period = get_midi_clock_pulse_rate_with_fine(
+            class_driver_obj->midi_timer_base_period, 
+            class_driver_obj->midi_timer_fine
+        );
     }
     // tempo bend - speed up; store pre-bend tempo
     if (uart_ev.byte1 == 0xBF && uart_ev.byte2 == 0x68 && uart_ev.byte3 == 0x7F) {
@@ -453,6 +471,7 @@ static void setup_timer_for_midi_clock(class_driver_t *driver_obj)
         .name = "MIDI clock",
         .skip_unhandled_events = true,
     };
+    driver_obj->midi_timer_base_period = DEFAULT_MIDI_CLOCK_TIMER_IN_USEC;
     driver_obj->midi_timer_period = DEFAULT_MIDI_CLOCK_TIMER_IN_USEC;
     driver_obj->new_midi_timer_period = DEFAULT_MIDI_CLOCK_TIMER_IN_USEC;
     esp_timer_create(&timer_args, &driver_obj->midi_timer_hdl);
