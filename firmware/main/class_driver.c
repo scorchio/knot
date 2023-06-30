@@ -253,6 +253,17 @@ static void transform_midi_packet(struct uart_midi_event_packet *uart_ev)
 }
 
 
+static uint64_t get_midi_clock_pulse_rate_usec(uint16_t stepIdx)
+{
+    uint8_t minBPM = 70;
+    uint8_t maxBPM = 180;
+    uint8_t pulseRatePPQN = 24; // as per MIDI clock spec
+    uint16_t totalSteps = 128;
+    float new_period = ((float)60 * 1000000) / (minBPM * pulseRatePPQN + ((maxBPM - minBPM) * stepIdx * pulseRatePPQN)/totalSteps);
+    return (uint64_t)new_period;
+}
+
+
 static void in_transfer_cb(usb_transfer_t *in_transfer)
 {
     //This is function is called from within usb_host_client_handle_events(). Don't block and try to keep it short
@@ -274,10 +285,7 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
     // control tempo based on mod wheel value
     if (uart_ev.byte1 == 0xB9)
     {
-        // pulseRateMicroSec = 60 * 1000000 / minBPM * pulseRatePPQN + ((maxBPM - minBPM) * activeMidiCcIntervals * pulseRatePPQN / totalMidiCcIntervals)
-        // minBPM = 70, maxBPM = 180, pulseRatePPQN = 24 (as per MIDI clock spec), total MIDI CC intervals = 128
-        float new_period = ((float)60 * 1000000) / ((float)70 * 24 + ((180 - 70) * (uart_ev.byte3) * 24)/128);
-        class_driver_obj->new_midi_timer_period = (uint64_t)new_period;
+        class_driver_obj->new_midi_timer_period = get_midi_clock_pulse_rate_usec(uart_ev.byte3);
     }
     // tempo bend - speed up; store pre-bend tempo
     if (uart_ev.byte1 == 0xBF && uart_ev.byte2 == 0x68 && uart_ev.byte3 == 0x7F) {
