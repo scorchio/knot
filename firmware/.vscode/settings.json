@@ -1,5 +1,7 @@
 {
   "files.associations": {
+    "**/frontmatter.json": "jsonc",
+    "**/.frontmatter/config/*.json": "jsonc",
     "gpio.h": "c",
     "esp_err.h": "c",
     "assert.h": "c",
@@ -28,7 +30,8 @@
     "xtensa_config.h": "c",
     "reent.h": "c",
     "esp_system.h": "c",
-    "ringbuf.h": "c"
+    "ringbuf.h": "c",
+    "esp_attr.h": "c"
 },
   "actionButtons": {
     "defaultColor": "#ff0034", // Can also use string color names.

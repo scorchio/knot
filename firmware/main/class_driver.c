@@ -431,7 +431,6 @@ static void timer_cb(void *arg)
 
     if (driver_obj->new_midi_timer_period != driver_obj->midi_timer_period)
     {
-        ESP_LOGI(TAG, "Period changed from %llu -> %llu", driver_obj->midi_timer_period, driver_obj->new_midi_timer_period);
         esp_timer_restart(driver_obj->midi_timer_hdl, driver_obj->new_midi_timer_period);
         driver_obj->midi_timer_period = driver_obj->new_midi_timer_period;
     }
@@ -445,7 +444,7 @@ static void setup_timer_for_midi_clock(class_driver_t *driver_obj)
         .arg = (void *)driver_obj,
         .dispatch_method = ESP_TIMER_TASK,
         .name = "MIDI clock",
-        .skip_unhandled_events = false,
+        .skip_unhandled_events = true,
     };
     driver_obj->midi_timer_period = DEFAULT_MIDI_CLOCK_TIMER_IN_USEC;
     driver_obj->new_midi_timer_period = DEFAULT_MIDI_CLOCK_TIMER_IN_USEC;
