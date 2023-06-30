@@ -241,7 +241,6 @@ static usb_transfer_t *in_transfer;
 
 static void transform_midi_packet(struct uart_midi_event_packet *uart_ev)
 {
-    ESP_LOGI(TAG, "MIDI packet pre-transform: 0x%02X 0x%02X 0x%02X", uart_ev->byte1, uart_ev->byte2, uart_ev->byte3);
     if ((uart_ev->byte1 & 0xF0) == 0xB0 && uart_ev->byte2 >= 0x15 && uart_ev->byte2 <= 0x1A) // MIDI CC
     {
         uint8_t cc_on_channel_zero = uart_ev->byte1 - 9;
@@ -249,7 +248,6 @@ static void transform_midi_packet(struct uart_midi_event_packet *uart_ev)
         uart_ev->byte1 = cc_on_channel_zero + channel_shift;
         uart_ev->byte2 = 0x5F; // Model:Samples track level CC
     }
-    ESP_LOGI(TAG, "MIDI packet post-transform: 0x%02X 0x%02X 0x%02X", uart_ev->byte1, uart_ev->byte2, uart_ev->byte3);
 }
 
 
