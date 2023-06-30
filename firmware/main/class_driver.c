@@ -266,8 +266,8 @@ static uint64_t get_midi_clock_pulse_rate_usec(uint16_t stepIdx)
 
 static uint64_t get_midi_clock_pulse_rate_with_fine(uint64_t base, int16_t fine)
 {
-    // mapping the 14-bit unsigned fine to +/- 8% - the first - is because we need to reverse the values
-    float ratio = 1 - (fine / 8192.0 * 8 / 100); 
+    // mapping the 7-bit unsigned fine to +/- 8% - the first - is because we need to reverse the values
+    float ratio = 1 - (fine / 63.0 * 8 / 100); 
     uint64_t result = (uint64_t)(base * ratio);
     ESP_LOGI(TAG, "Calculating pulse rate: base = %llu, fine = %i (ratio = %f), result = %llu", base, fine, ratio, result);
     return result;
@@ -292,8 +292,8 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
 
     struct uart_midi_event_packet uart_ev = usb_midi_to_uart(usb_ev);
 
-    // control tempo based on mod wheel value
-    if (uart_ev.byte1 == 0xB9)
+    // control coarse tempo based on 7th knob
+    if ((uart_ev.byte1 & 0xF0) == 0xB0 && uart_ev.byte2 == 0x1B)
     {
         class_driver_obj->midi_timer_base_period = get_midi_clock_pulse_rate_usec(uart_ev.byte3);
         class_driver_obj->new_midi_timer_period = get_midi_clock_pulse_rate_with_fine(
@@ -301,12 +301,10 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
             class_driver_obj->midi_timer_fine
         );
     }
-    // fine tempo control based on pitch wheel, ignoring automatically triggered mid point
-    // On a mechanically reset pitch wheel, this wouldn't work this simply, but for the
-    // Launchkey Mini MK3 which is reset digitally it's fine.
-    if (uart_ev.byte1 == 0xE9 && !(uart_ev.byte2 == 0x00 && uart_ev.byte3 == 0x40))
+    // fine tempo control based on 8th knob
+    if ((uart_ev.byte1 & 0xF0) == 0xB0 && uart_ev.byte2 == 0x1C)
     {
-        class_driver_obj->midi_timer_fine = ((uart_ev.byte3 - 0x40) << 7) + uart_ev.byte2;
+        class_driver_obj->midi_timer_fine = uart_ev.byte3 - 0x3F;
         class_driver_obj->new_midi_timer_period = get_midi_clock_pulse_rate_with_fine(
             class_driver_obj->midi_timer_base_period, 
             class_driver_obj->midi_timer_fine
