@@ -319,6 +319,7 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
     }
     // tempo bend - slow down; store pre-bend tempo
     if (uart_ev.byte1 == 0xBF && uart_ev.byte2 == 0x69 && uart_ev.byte3 == 0x7F) {
+        class_driver_obj->midi_timer_period_pre_bend = class_driver_obj->midi_timer_period;
         class_driver_obj->new_midi_timer_period = class_driver_obj->midi_timer_period + class_driver_obj->midi_timer_period / 16;
     }
     // tempo bend - release; restore pre-bend tempo
