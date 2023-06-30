@@ -35,6 +35,7 @@ typedef struct {
     uint64_t midi_timer_period;
     uint64_t new_midi_timer_period;
     uint64_t midi_timer_period_pre_bend;
+    uint16_t midi_timer_fine;
 } class_driver_t;
 
 
@@ -284,6 +285,14 @@ static void in_transfer_cb(usb_transfer_t *in_transfer)
     if (uart_ev.byte1 == 0xB9)
     {
         class_driver_obj->new_midi_timer_period = get_midi_clock_pulse_rate_usec(uart_ev.byte3);
+    }
+    // fine tempo control based on pitch wheel, ignoring automatically triggered mid point
+    // On a mechanically reset pitch wheel, this wouldn't work this simply, but for the
+    // Launchkey Mini MK3 which is reset digitally it's fine.
+    if (uart_ev.byte1 == 0xE9 && !(uart_ev.byte2 == 0x00 && uart_ev.byte3 == 0x40))
+    {
+        class_driver_obj->midi_timer_fine = (uart_ev.byte3 << 7) + uart_ev.byte2;
+        ESP_LOGI(TAG, "Pitch result: %i", class_driver_obj->midi_timer_fine);
     }
     // tempo bend - speed up; store pre-bend tempo
     if (uart_ev.byte1 == 0xBF && uart_ev.byte2 == 0x68 && uart_ev.byte3 == 0x7F) {
